@@ -1,4 +1,5 @@
 (* Programme temporaire de test *)
+(* see Format, pp_print_list *)
 let print_int_list l =
   print_string "[";
   let rec loop l =
@@ -18,3 +19,6 @@ let () =
 
   let l3 = Path.dfs g1 4 in
   print_int_list l3
+
+(* Sys.argv pour des entrées dynamiques: module Arg *)
+(* Graphviz *)

@@ -5,6 +5,7 @@ let parse file =
   let g = Graph.create v in
 
   let rec loop () =
+    (* match with exception to keep the terminal behaviour *)
     try
       let line = input_line channel in 
       Scanf.sscanf line "%d %d" (fun v1 v2 -> 

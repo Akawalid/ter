@@ -3,40 +3,33 @@ module Graph
   use list.List
   use array.Array
 
-  (* Main problem *)
-  predicate list_eq (l1 l2: list int) =
-    match l1, l2 with
-    | Nil, Nil -> true
-    | Cons x1 xs1, Cons x2 xs2 -> x1 = x2 /\ list_eq xs1 xs2
-    | _, _ -> false
-    end
 
 
   type t = array (list int)
 
 
-  (* Should I prove this? *)
-  let size (g : t) : int
+  let function size (g : t) : int
   = Array.length g
 
 
   let create (n : int ) : t
   requires { n >= 0 }
   ensures { Array.length result = n }
+  ensures { forall i. 0 <= i < Array.length result -> result[i] = Nil }
   = Array.make n Nil
 
 
   let add_e (g : t) (s1 : int) (s2 : int) : unit
   requires { 
-    s1 >= 0 && s2 >= 0 &&
-    s1 < Array.length g && 
+    s1 >= 0 /\ s2 >= 0 /\
+    s1 < Array.length g /\ 
     s2 < Array.length g
   }
   ensures {
-    forall s: int. 0 <= s < Array.length g -> s <> s1 -> list_eq g[s] (old g)[s]
+    forall s: int. 0 <= s < Array.length g -> s <> s1 -> g[s] = (old g)[s]
   }
   ensures {
-    list_eq g[s1] (Cons s2 ((old g)[s1]))
+    g[s1] = (Cons s2 ((old g)[s1]))
   }
   =
     g[s1] <- Cons s2 g[s1]
@@ -44,7 +37,7 @@ module Graph
 
   let succ (g : t) (v : int) : list int
   requires { v >= 0 && v < Array.length g }
-  ensures { list_eq result g[v] }
+  ensures { result = g[v] }
   = g[v]
 
 end
