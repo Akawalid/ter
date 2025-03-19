@@ -7,6 +7,7 @@ module Graph
 
   type t = array (list int)
 
+  predicate inside (g: t) (s: int) = 0 <= s < Array.length g
 
   let function size (g : t) : int
   = Array.length g
@@ -40,4 +41,53 @@ module Graph
   ensures { result = g[v] }
   = g[v]
 
+end
+
+module Path
+  use ref.Ref
+  use int.Int
+  use list.List
+  use array.Array
+  clone Graph
+  
+  let rec function concat l l' =
+    match l, l' with 
+      | Nil, _ -> l'
+      | _, Nil -> l 
+      | Cons e l, _ -> Cons e (concat l l')
+    end
+    
+  let rec lemma recConcat (n: int) (l l': list int) =
+  (*les elements de l et l' sont exactement les elemetns de concat l l' avec les répétitions*)
+    match l, l' with 
+      | Nil, _ -> ()
+      | Cons e l'', Nil -> recConcat (n-1) l'' l'
+      | Cons e l'', _  -> 
+        recConcat (n-1) l'' l' ;
+        assert {concat l l' = Cons e (concat l'' l')};
+        ()
+    end
+    
+  let dfs g s =
+  
+    let visited = Array.make (Graph.size g) false in
+    let accessible = ref Nil in
+    
+    let rec loop s neighbours =
+      if not (visited[s]) then begin
+        visited[s] <- true;
+        accessible := Cons s !accessible;
+        (*
+          BFS: List.concat neighbours (Graph.succ g s)
+          DFS: List.concat (Graph.succ g s) neighbours
+        *)
+        match concat (Graph.succ g s) neighbours with 
+          | Cons succ others -> loop succ others 
+          | Nil -> ()
+          end
+      end
+    in
+
+    loop s (Graph.succ g s);
+    !accessible
 end

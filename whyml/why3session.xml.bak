@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE why3session PUBLIC "-//Why3//proof session v5//EN"
+"https://www.why3.org/why3session.dtd">
+<why3session shape_version="6">
+<prover id="0" name="CVC5" version="1.2.0" timelimit="1" steplimit="0" memlimit="1000"/>
+<file format="whyml" proved="true">
+<path name="path.mlw"/>
+</file>
+<file format="whyml">
+<path name="graph.mlw"/>
+<theory name="Graph">
+ <goal name="create&#39;vc" expl="VC for create">
+ </goal>
+ <goal name="add_e&#39;vc" expl="VC for add_e">
+ </goal>
+ <goal name="succ&#39;vc" expl="VC for succ">
+ </goal>
+</theory>
+<theory name="Path">
+ <goal name="recConcat&#39;vc" expl="VC for recConcat" proved="true">
+ <proof prover="0"><result status="valid" time="0.800041" steps="1923"/></proof>
+ </goal>
+ <goal name="dfs&#39;vc" expl="VC for dfs">
+ </goal>
+</theory>
+</file>
+</why3session>
