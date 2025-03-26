@@ -12,7 +12,7 @@ module Graph
 
   let e_size g =
     let rec aux i n =
-      variant{i} 
+      variant{ Array.length g - i } 
       if i >= Array.length g then n
       else aux (i+1) (n + Length.length g[i])
     in
@@ -48,10 +48,10 @@ module Graph
   predicate safe_graph (g: t) = 
     forall i e: int. 0 <= i < Array.length g -> mem e (succ g i) -> 0 <= e < Array.length g
 
-  predicate path (g :t) (v: int) (v':int) (n:int)
+  (* predicate path (g :t) (v: int) (v':int) (n:int)
   =
     if n <= 0 then v = v'
-    else exists w. (mem w (succ g v) /\ path g w v' (n-1))
+    else exists w. (mem w (succ g v) /\ path g w v' (n-1)) *)
 end
 
 module Path
@@ -67,7 +67,7 @@ module Path
     requires{0 <= v < Graph.size g }
     requires { Graph.safe_graph g }
     
-    ensures{forall v' n: int. Graph.linked v v' g n -> mem v' result} (*correction*)
+    ensures{forall v' n: int. Graph.path g v v' n -> mem v' result} (*correction*)
     let visited = Array.make (Graph.size g) false in
     let accessible = ref Nil in
     
@@ -78,7 +78,7 @@ module Path
       (*each node is visited as many as it's in_degree
       -> edges size is the variant
       *)
-      ensures{forall v' n: int. Graph.linked v v' g n -> mem v' !accessible}      
+      ensures{forall v' n: int. Graph.path g v v' n -> mem v' !accessible}      
       variant{!varian}
       varian := !varian - 1;
 
