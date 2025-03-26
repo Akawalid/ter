@@ -1,24 +1,32 @@
 module Graph
   use int.Int
   use list.List
+  use list.Length
+  use list.Mem
   use array.Array
 
-
-
   type t = array (list int)
+  
+  (*problem, we need a structure invariant}
 
   predicate inside (g: t) (s: int) = 0 <= s < Array.length g
 
   let function size (g : t) : int
   = Array.length g
 
+  let e_size g =
+    let rec aux i n =
+      variant{i} 
+      if i >= Array.length g then n
+      else aux (i+1) (n + Length.length g[i])
+    in
+    aux 0 0
 
   let create (n : int ) : t
   requires { n >= 0 }
   ensures { Array.length result = n }
   ensures { forall i. 0 <= i < Array.length result -> result[i] = Nil }
   = Array.make n Nil
-
 
   let add_e (g : t) (s1 : int) (s2 : int) : unit
   requires { 
@@ -36,60 +44,87 @@ module Graph
     g[s1] <- Cons s2 g[s1]
 
 
-  let succ (g : t) (v : int) : list int
+  let function succ (g : t) (v : int) : list int
   requires { v >= 0 && v < Array.length g }
   ensures { result = g[v] }
   = g[v]
 
+     (*predicate linked (v: int) (v':int) (g:Graph.t) (ghost n:int) =
+   variant{Graph.size g - n}
+   
+    if v <> v' then begin
+      let rec loop l = 
+        variant{l} 
+        match l with 
+          | Nil -> false
+          | Cons neighbour s -> 
+            (
+            try
+              linked neighbour v' g (n+1);
+              true
+            with 
+              | _ -> loop s
+              end
+        end
+      in
+      assert {loop (Graph.succ g v)}
+    end*)
+
+  inductive linked (v: int) (v':int) (g :t) (n:int) 
+  =
+    | init:
+        forall v: int, g :t. linked v v g 0
+    | induct:
+        forall v1 v2 v3 n: int, g :t.
+        linked v1 v2 g n -> mem v3 (succ g v2) -> linked v1 v3 g (n+1)
 end
 
 module Path
   use ref.Ref
   use int.Int
   use list.List
+  use list.Length
+  use list.Mem
   use array.Array
   clone Graph
-  
-  let rec function concat l l' =
-    match l, l' with 
-      | Nil, _ -> l'
-      | _, Nil -> l 
-      | Cons e l, _ -> Cons e (concat l l')
-    end
+      
+  let dfs (g: Graph.t) (v: int): (result: list int) =
+    ensures{
+      forall v' n: int. Graph.linked v v' g n -> mem v' result
+    }
+    (*Starter not in the graph*)
+    if v < 0 || v > Graph.size g then Nil 
+    else begin 
     
-  let rec lemma recConcat (n: int) (l l': list int) =
-  (*les elements de l et l' sont exactement les elemetns de concat l l' avec les répétitions*)
-    match l, l' with 
-      | Nil, _ -> ()
-      | Cons e l'', Nil -> recConcat (n-1) l'' l'
-      | Cons e l'', _  -> 
-        recConcat (n-1) l'' l' ;
-        assert {concat l l' = Cons e (concat l'' l')};
-        ()
-    end
-    
-  
-    
-  let dfs g s =
-  
-    let visited = Array.make (Graph.size g) false in
-    let accessible = ref Nil in
-    
-    let rec loop s neighbours =
-      if not (visited[s]) then begin
-        visited[s] <- true;
-        accessible := Cons s !accessible;
-        (*
-          BFS: List.concat neighbours (Graph.succ g s)
-          DFS: List.concat (Graph.succ g s) neighbours
+      let visited = Array.make (Graph.size g) false in
+      let accessible = ref Nil in
+      
+      let varian = ref (Graph.e_size g + 2 * (Graph.size g)) in
+      
+      let rec branch v =
+        (*each node is visited as many as it's in_degree
+        ==> edges size is the variant
         *)
-        match concat (Graph.succ g s) neighbours with 
-          | Cons succ others -> loop succ others 
-          | Nil -> ()
-          end
-      end
-    in
+        requires{v >= 0 && v < Graph.size g }
+        variant{!varian}
+        varian := !varian - 1;
 
-    loop s (Graph.succ g s);
-    !accessible
+        assert{Array.length visited = Graph.size g};
+        if not (visited[v]) then begin
+          visited[v] <- true;
+          accessible := Cons v !accessible;
+          loop (Graph.succ g v)
+        end
+          
+      with loop l = 
+          variant{!varian}
+          varian := !varian - 1;
+          match l with 
+            | Nil -> ()
+            | Cons neighbour s -> branch neighbour; loop s
+          end
+        in
+        branch v;
+        !accessible
+     end
 end
