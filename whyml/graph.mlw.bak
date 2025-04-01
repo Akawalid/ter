@@ -48,10 +48,10 @@ module Graph
   predicate safe_graph (g: t) = 
     forall i e: int. 0 <= i < Array.length g -> mem e (succ g i) -> 0 <= e < Array.length g
 
-  predicate path (g :t) (v: int) (v':int) (n:int)
+  inductive path (g :t) (v: int) (v':int)
   =
-    if n = 0 then v = v'
-    else exists w. (mem w (succ g v) /\ path g w v' (n-1))
+  | Init: forall u: int, g: t. path g u u
+  | Induction: forall u v w: int, g: t. path g u v -> mem w (succ g v) -> path g u w
 end
 
 module Path
@@ -67,34 +67,32 @@ module Path
     requires{0 <= v < Graph.size g }
     requires { Graph.safe_graph g }
     
-    ensures{forall v' n: int. Graph.linked v v' g n -> mem v' result} (*correction*)
+    ensures{forall v' n: int. Graph.path g v v' -> mem v' result} (*correction*)
     let visited = Array.make (Graph.size g) false in
     let accessible = ref Nil in
     
     let varian = ref (Graph.e_size g + 2 * (Graph.size g)) in
     
-    let rec branch v =
+    let rec branch v n =
       requires{0 <= v < Graph.size g } (*peut etre inféré par safe_graph*)
       (*each node is visited as many as it's in_degree
       -> edges size is the variant
       *)
-      ensures{forall v' n: int. Graph.linked v v' g n -> mem v' !accessible}      
-      variant{!varian}
-      varian := !varian - 1;
+      ensures{forall v': int. Graph.path g v v' -> mem v' !accessible}      
+      variant{n}
 
       assert{Array.length visited = Graph.size g};
       if not (visited[v]) then begin
         visited[v] <- true;
         accessible := Cons v !accessible;
-        loop (Graph.succ g v)
+        loop (Graph.succ g v) (n-1)
       end
         
-    with loop l = 
-        variant{!varian}
-        varian := !varian - 1;
+    with loop l n = 
+        variant{n}
         match l with 
           | Nil -> ()
-          | Cons neighbour s -> branch neighbour; loop s
+          | Cons neighbour s -> branch neighbour (n-1); loop s (n-1)
         end
       in
       branch v;
