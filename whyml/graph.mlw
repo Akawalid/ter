@@ -10,9 +10,10 @@ module Graph
   let function size (g : t) : int
   = Array.length g
 
-  let e_size g =
+  let function e_size g =
     let rec aux i n =
-      variant{i} 
+      requires {i>=0}
+      variant{Array.length g - i} 
       if i >= Array.length g then n
       else aux (i+1) (n + Length.length g[i])
     in
@@ -39,14 +40,19 @@ module Graph
   =
     g[s1] <- Cons s2 g[s1]
 
+  predicate safe_neighbours (l: list int)(g: t) = 
+    forall e: int. mem e l -> 0 <= e < Array.length g
+
+  predicate safe_graph (g: t) = 
+    forall i: int. 0 <= i < Array.length g -> safe_neighbours g[i] g
 
   let function succ (g : t) (v : int) : list int
   requires { 0 <= v < Array.length g }
+  requires { safe_graph g}
+  ensures { forall n: int. mem n result -> 0 <= n < Array.length g } 
   ensures { result = g[v] }
   = g[v]
 
-  predicate safe_graph (g: t) = 
-    forall i e: int. 0 <= i < Array.length g -> mem e (succ g i) -> 0 <= e < Array.length g
 
   inductive path (g :t) (v: int) (v':int)
   =
@@ -57,42 +63,64 @@ end
 module Path
   use ref.Ref
   use int.Int
-  use list.List
   use list.Length
   use list.Mem
+  use list.List
+  use list.NthNoOpt
   use array.Array
-  clone Graph
-      
+  clone Graph   
+  use array.NumOfEq as N
+  
+  (*type path = list int
+
+  predicate path (g: Graph.t) (x y: int) (p: path)
+  = 1 <= Length.length p /\ x = NthNoOpt.nth 0 p /\ y = NthNoOpt.nth (Length.length p - 1) p  /\
+    (forall i. 0 <= i < Length.length p -> 0 <= NthNoOpt.nth i p < Graph.size g) /\
+    (forall i. 0 <= i < Length.length p - 1 -> mem (NthNoOpt.nth (i+1) p) (Graph.succ g (NthNoOpt.nth i p)))
+  *)
+
+  (*let function nv (visited: array bool): int =  NumOf.numof  (fun i a -> visited[i] = False ) visited 0 (Array.length visited)*)
+  function nv (visited: array bool): int =  N.numof visited false 0 (Array.length visited)
+  
   let dfs (g: Graph.t) (v: int): (result: list int) =
-    requires{0 <= v < Graph.size g }
+    requires{ 0 <= v < Array.length g }
     requires { Graph.safe_graph g }
+    (*ensures{forall n: int, p: path. path g v n p -> mem n result}*)
     
-    ensures{forall v' n: int. Graph.path g v v' -> mem v' result} (*correction*)
     let visited = Array.make (Graph.size g) false in
     let accessible = ref Nil in
-    
-    let rec branch v n =
+    assert{Array.length visited = Graph.size g};
+    let rec branch v
       requires{0 <= v < Graph.size g } (*peut etre inféré par safe_graph*)
       (*each node is visited as many as it's in_degree
       -> edges size is the variant
       *)
-      ensures{forall v': int. Graph.path g v v' -> mem v' !accessible}      
-      variant{n}
+      (*ensures{forall n: int, p: path. path g v n p -> mem n !accessible}*)
 
-      assert{Array.length visited = Graph.size g};
+      variant{ (nv visited, 0) }
+      =
+
+        assert{ nv visited = nv (old visited) };
       if not (visited[v]) then begin
+        assert{ nv visited = nv (old visited) };
+        assert{ visited[v] = false };
         visited[v] <- true;
+        assert{ visited[v] = true };
+        assert{ nv visited < nv (old visited) };
         accessible := Cons v !accessible;
-        loop (Graph.succ g v) (n-1)
+        loop (Graph.succ g v)
       end
-        
-    with loop l n = 
-        variant{n}
+    with loop l = 
+       requires { safe_neighbours l g }
+       (*ensures{forall n: int, p: path. path g v n p -> mem n !accessible}*)
+       variant{ (nv visited, Length.length l) }
         match l with 
           | Nil -> ()
-          | Cons neighbour s -> branch neighbour (n-1); loop s (n-1)
+          | Cons neighbour s -> 
+              branch neighbour;
+              loop s
         end
       in
-      branch v (2 * (Graph.size g));
+      branch v;
       !accessible
 end
