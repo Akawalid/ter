@@ -67,7 +67,7 @@ module Path
   use list.Mem
   use list.List
   use list.NthNoOpt
-  use array.Array
+  use seq.Seq as S
   clone Graph   
   use array.NumOfEq as N
   
@@ -80,17 +80,16 @@ module Path
   *)
 
   (*let function nv (visited: array bool): int =  NumOf.numof  (fun i a -> visited[i] = False ) visited 0 (Array.length visited)*)
-  function nv (visited: array bool): int =  N.numof visited false 0 (Array.length visited)
+  function nv (visited: seq bool): int =  N.numof visited false 0 (S.length visited)
   
   let dfs (g: Graph.t) (v: int): (result: list int) =
-    requires{ 0 <= v < Array.length g }
+    requires{ 0 <= v < Graph.size g }
     requires { Graph.safe_graph g }
     (*ensures{forall n: int, p: path. path g v n p -> mem n result}*)
     
-    let visited = Array.make (Graph.size g) false in
     let accessible = ref Nil in
     assert{Array.length visited = Graph.size g};
-    let rec branch v
+    let rec branch v (visited: seq bool)
       requires{0 <= v < Graph.size g } (*peut etre inféré par safe_graph*)
       (*each node is visited as many as it's in_degree
       -> edges size is the variant
