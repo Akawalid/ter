@@ -10,9 +10,10 @@ module Graph
   let function size (g : t) : int
   = Array.length g
 
-  let e_size g =
+  let function e_size g =
     let rec aux i n =
-      variant{ Array.length g - i } 
+      requires {i>=0}
+      variant{Array.length g - i} 
       if i >= Array.length g then n
       else aux (i+1) (n + Length.length g[i])
     in
@@ -39,63 +40,116 @@ module Graph
   =
     g[s1] <- Cons s2 g[s1]
 
+  predicate safe_neighbours (l: list int)(g: t) = 
+    forall e: int. mem e l -> 0 <= e < Array.length g
+
+  predicate safe_graph (g: t) = 
+    forall i: int. 0 <= i < Array.length g -> safe_neighbours g[i] g
 
   let function succ (g : t) (v : int) : list int
   requires { 0 <= v < Array.length g }
+  requires { safe_graph g}
+  ensures { forall n: int. mem n result -> 0 <= n < Array.length g } 
   ensures { result = g[v] }
   = g[v]
 
-  predicate safe_graph (g: t) = 
-    forall i e: int. 0 <= i < Array.length g -> mem e (succ g i) -> 0 <= e < Array.length g
-
-  let rec predicate path (g :t) (v: int) (v':int) (n:int)
-  =
-    if n <= 0 then v = v'
-    else exists w. (mem w (succ g v) /\ path g w v' (n-1))
 end
 
 module Path
   use ref.Ref
   use int.Int
-  use list.List
-  use list.Length
+  use list.Length as L
   use list.Mem
+  use list.List
+  use list.NthNoOpt as Nth
   use array.Array
-  clone Graph
-      
-  let dfs (g: Graph.t) (v: int): (result: list int) =
-    requires{0 <= v < Graph.size g }
-    requires { Graph.safe_graph g }
+  clone Graph   
+  use array.NumOf as N
+
+  type path = list int
+
+ predicate path (g: Graph.t) (x y: int) (p: path)
+   = 1 <= L.length p /\ x = Nth.nth 0 p /\ y = Nth.nth (L.length p - 1) p /\
+     (forall i. 0 <= i < L.length p -> 0 <= Nth.nth i p < Graph.size g) /\
+     (forall i. 0 <= i < L.length p - 1 -> mem (Nth.nth (i+1) p) (Graph.succ g (Nth.nth i p)))
+
+ lemma path_extension: forall g: Graph.t, v j i: int, p: path.
+  0 <= v < Graph.size g -> 0 <= j < Graph.size g -> 
+  mem j (Graph.succ g v) -> path g j i p -> 
+   path g v i (Cons v p)
+  
+  function nv (visited: array bool): int =  N.numof (fun i a -> a = false) visited 0 (Array.length visited)
+  
+  
+  lemma translation: forall a: array bool, i: int, p: int -> bool -> bool. 
+  0 <= i < Array.length a -> a[i] ->
+  N.numof (fun i _ -> a[i] = false) a 0 (Array.length a) = 
+  N.numof (fun i _ -> a[i] = false) a 0 i + 
+  N.numof (fun i _ -> a[i] = false) a (i+1) (Array.length a)
+  
+  lemma numof_update: forall a: array bool, i: int. 
+  0 <= i < Array.length a -> a[i] = false ->
+  N.numof (fun i _ -> a[i] = false) (a[i <- true]) 0 (Array.length a) =
+  N.numof (fun i _ -> a[i] = false) a  0 (Array.length a) - 1
     
-    ensures{forall v' n: int. Graph.path g v v' n -> mem v' result} (*correction*)
+  (*lemma numof_update: forall a: array bool, i: int. 
+  0 <= i < Array.length a ->
+  N.numof (fun i a -> a = false) (a[i <- true]) 0 (Array.length a) 
+  = N.numof (fun i' a -> a = if i = i' then true else a = false) a  0 (Array.length a)*)
+
+  let dfs (g: Graph.t) (v: int): (result: list int) =
+    requires{ 0 <= v < Array.length g }
+    requires { Graph.safe_graph g }
+  
     let visited = Array.make (Graph.size g) false in
     let accessible = ref Nil in
-    
-    let varian = ref (Graph.e_size g + 2 * (Graph.size g)) in
-    
-    let rec branch v =
-      requires{0 <= v < Graph.size g } (*peut etre inféré par safe_graph*)
-      (*each node is visited as many as it's in_degree
-      -> edges size is the variant
-      *)
-      ensures{forall v' n: int. Graph.path g v v' n -> mem v' !accessible}      
-      variant{!varian}
-      varian := !varian - 1;
 
-      assert{Array.length visited = Graph.size g};
+    let rec branch v
+      requires{0 <= v < Graph.size g }
+      ensures { nv visited <= nv (old visited) }
+      ensures {
+      old visited[v] 
+      \/ forall i: int, p: path. path g v i p -> mem i (!accessible)}
+      (*ensures { forall i: int, p: path. path g v i p -> visited[i] }*)
+      variant{ nv visited, 0 }
+      =
+
       if not (visited[v]) then begin
         visited[v] <- true;
+        assert { nv visited < nv (old visited) };
+    
         accessible := Cons v !accessible;
+        (*assert{ forall i j: int, p:path. 
+  mem j (Graph.succ g v) -> path g j i p -> 
+  exists p': path. path g v i p' /\ Nth.nth 0 p' = v };*)
+        (*assert{ forall i j: int, p:path. mem j (Graph.succ g v) 
+        -> path g j i p 
+        -> path g v i (Cons v p)};*)
         loop (Graph.succ g v)
       end
-        
     with loop l = 
-        variant{!varian}
-        varian := !varian - 1;
+       requires { safe_neighbours l g }
+       ensures {nv visited <= nv (old visited)}
+       ensures {
+       forall i j: int, p: path. 
+       not(old visited[j])
+       -> mem j l 
+       -> path g j i p -> mem i (!accessible)
+       }
+       variant{ nv visited, L.length l }
         match l with 
           | Nil -> ()
-          | Cons neighbour s -> branch neighbour; loop s
-        end
+          | Cons neighbour s -> 
+              branch neighbour;
+              loop s
+        end;
+        (*assert {
+       forall i j: int, p: path. 
+       not(old visited[j])
+       -> mem j l 
+       -> path g j i p -> mem i (!accessible)
+       }*)
+      
       in
       branch v;
       !accessible
