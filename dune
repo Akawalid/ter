@@ -1,3 +1,4 @@
 (executable
  (name main)
- (modules graph parse path main))
+ (modules parse main before_separation graph2 path2)
+ (libraries zarith))
