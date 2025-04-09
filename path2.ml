@@ -1,3 +1,4 @@
+open Graph2
 type path = (Z.t) list
 
 let dfs (g: ((Z.t) list) array) (v: Z.t) : (Z.t) list =
