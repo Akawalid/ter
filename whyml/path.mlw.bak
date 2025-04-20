@@ -60,6 +60,26 @@ module Path
     N.numof (fun _ x -> x = false) (a[i<-true]) 0 a[i<-true].length <
     N.numof (fun _ x -> x = false) a 0 a.length
 
+  lemma accessible_invariant:
+    forall g: Graph.t, p: path, visited: array bool, accessible: list int, v: int.
+    0 <= v < Graph.size g ->
+    Graph.safe_graph g ->
+    (forall j. 0 <= j < Graph.size g -> visited[j] = true -> mem j accessible) ->
+    (forall j k. 0 <= j < Graph.size g -> visited[j] = true -> 
+    path g j k p -> mem k accessible) ->
+    path g v i p ->
+    mem i accessible
+
+  lemma reachable_nodes_in_accessible:
+    forall g: Graph.t, v i: int, p: path, visited: array bool, accessible: list int.
+    path g v i p ->
+      (forall j. 0 <= j < Graph.size g -> visited[j] = true -> mem j accessible) ->
+        (forall j k. 0 <= j < Graph.size g -> visited[j] = true -> 
+          path g j k p -> mem k accessible) ->
+            mem i accessible
+  = 
+    accessible_invariant g visited accessible v
+
   let dfs (g: Graph.t) (v: int): (result: list int)
     requires { 0 <= v < Array.length g }
     requires { Graph.safe_graph g }
@@ -74,7 +94,7 @@ module Path
         (old visited)[v]
         \/ forall i: int, p: path. path g v i p -> mem i (!accessible)
       }
-      variant { nv visited, 0 }
+      variant{ nv visited, 0 }
     =
       if not (visited[v]) then begin
         assert { AEQ.array_eq (old visited) visited };
@@ -88,23 +108,16 @@ module Path
         };
 
         accessible := Cons v !accessible;
-        let succs = Graph.succ g v in
-        loop (succs);
-        (* assert {
-          forall i j: int, p: path. 
-          not((old visited)[j])
-          -> mem j (succs)
-          -> path g j i p -> mem i (!accessible)
-        }; *) (* should, but doesn't get verified, even tho ensured by loop ? *)
-        assert { forall i: int, p: path. path g v i p -> mem i (!accessible) };
+        loop (Graph.succ g v);
+        assert { forall i: int, p: path. path g v i p -> mem i (!accessible) }
       end
     with loop l 
       requires { safe_neighbours l g }
       ensures { nv visited <= nv (old visited) }
       ensures {
         forall i j: int, p: path. 
-        not((old visited)[j])
-        -> mem j l
+        not(old visited[j])
+        -> mem j l 
         -> path g j i p -> mem i (!accessible)
       }
       variant { nv visited, L.length l }
@@ -113,20 +126,16 @@ module Path
         | Nil -> ()
         | Cons neighbour s -> 
           branch neighbour;
-          assert {
-            forall i: int, p: path. 
-            not((old visited)[neighbour])
-            -> mem neighbour l
-            -> path g neighbour i p -> mem i (!accessible)
-          };
-          loop s;
-          assert {
-            forall i j: int, p: path.
-              not((old visited)[j]) ->
-              mem j l ->
-              path g j i p -> mem i (!accessible)
-          };
+          loop s
       end;
+        (*
+          assert {
+          forall i j: int, p: path. 
+          not(old visited[j])
+          -> mem j l 
+          -> path g j i p -> mem i (!accessible)
+          }
+        *)
     in
     branch v;
     !accessible
