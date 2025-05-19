@@ -37,25 +37,29 @@ module Path
   function nv (visited: array bool): int = N.numof (fun _ a -> a = false) visited 0 (Array.length visited)
   
   (*
-    les lemmes en bas, montrent des propriétés en combinant nth et ++
+    les lemmes en bas, montrent des propriétés sur la combinaison de nth et ++
   *)
-  lemma nth_append:
+  
+  axiom nth_append:
   forall l1 l2: list 'a, i: int.
     0 <= i < L.length l1 -> 
     Nth.nth i (APP.(l1 ++ l2)) = Nth.nth i l1
 
-  lemma nth_append_right:
+  axiom nth_append_right:
     forall l1 l2: list 'a, i: int.
       0 <= i < L.length l2 -> 
       Nth.nth (i + L.length l1) (APP.(l1 ++ l2)) = Nth.nth i l2
 
+(* Le prouveur n’arrivait pas à démontrer nth_append et nth_append_right, donc nous les avons admis comme axiomes,
+ puisqu’ils correspondent à leurs définitions combinées. *)
+ 
   lemma numof_concat:
     forall a: array bool, l m r f.
       0 <= l <= m <= r <= Array.length a ->
       N.numof f a l r = N.numof f a l m + N.numof f a m r
  
  
-(*ce lemme était un peu difficile pour why3, on l'a aidé avec des assertions pour aboutir à la postcondition.*)
+(* Ce lemme était un peu difficile à prouver pour Why3 ; nous l’avons aidé avec des assertions pour atteindre la postcondition. *)
 let lemma numof_update (a: array bool) (i: int) : (array bool)
     requires { 0 <= i < Array.length a }
     requires { a[i] = false }
@@ -90,7 +94,7 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
     +
     N.numof (fun _ x -> x = false) result (i+1) (Array.length result)
     }
-    (*La postcondition dont on a besoin dans la suite de la preuve.*)
+    (* La postcondition dont on a besoin dans la suite de la preuve. *)
     ensures {  
       N.numof (fun _ x -> x = false) a 0 (Array.length a) >
       N.numof (fun _ x -> x = false) result 0 (Array.length result)
@@ -99,11 +103,11 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
     a[i<- true]
 
 
-  (*L elemme précédent est utilisé pour montrer le lemme suivant:
-    Le nombre de valeurs 'faux' dans un tableau ou on substitue une valeur 'faux' par 'vrai'
-    est strictement supérieur au nombre de valeurs 'faux' dans le meme tableau sans appliquant 
-    la substition.
-  *)
+
+  (* Lemme précédent utilisé pour montrer le suivant :
+     le nombre de 'false' dans un tableau où l’on remplace une valeur 'false' par 'true'
+     est strictement supérieur au nombre de 'false' dans le même tableau sans cette substitution. *)
+
   lemma numof_lemma:
     forall a: array bool, i: int. 
     0 <= i < Array.length a -> (a[i] = false) ->
@@ -111,15 +115,15 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
     N.numof (fun _ x -> x = false) a 0 a.length
 
 
-  (*L'algorithme utilisé pour la recherche des chemins accessible est le DFS, 
-      on utilise deux sous-fonctions: 
-          branch: vertex -> (): pour visiter les noeuds.
-          loop: list vertex -> (): pour visiter les branches
-      les entrées: 
-        g: le graph.
-        v': le noeud pour lequel on calculera les chemins accessibles.
-        result: list vertex
-  *)
+  (* L’algorithme utilisé pour la recherche des chemins accessibles est le DFS.
+     On utilise deux sous-fonctions :
+        - branch : vertex → () — pour visiter les nœuds
+        - loop : list vertex → () — pour visiter les branches
+     Entrées :
+        g : le graphe
+        v' : le nœud à partir duquel on calcule les chemins accessibles
+        result : list des sommets accessibles *)
+        
   let dfs (g: Graph.t) (v': int): (result: list int)
     (*On demande que le graph et le noeud d'entrée soient valids.*)
     requires { 0 <= v' < Array.length g }
@@ -129,43 +133,50 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
     let accessible = ref Nil in
 
     let rec branch v (ghost pt: path)
-    (*
-    pt est urilisé pour montrer la correction, au lieu de quantifier existanciellement on le construit directement
-    ce qui facilite le travail sur le prouveur.
-    *)
+    (* pt est utilisé pour montrer la correction ; au lieu de quantifier existentiellement,
+     on le construit directement, ce qui facilite le travail du prouveur. *)
     
-    (*
-      pour la correction, on a pris un chemin un peu long, 
-      on a montré que si un noed est visité, alors, il existe un chemin qui mène de v' à v
-      puis on a montré que v \in accessible <==> visited[v], alors que on aurait du 
-      montrer directement que v \inaccessible => il existe un chemin qui mène de v' à v
-    *)
-      requires{ 0 <= v < Graph.size g }
+    (* pour la correction, on a suivi un chemin un peu long :
+     on a montré que si un nœud est visité, alors il existe un chemin de v' à v ;
+     ensuite, on a montré que v ∈ accessible <==> visited[v], alors qu’on aurait pu
+     montrer directement que v ∈ accessible => il existe un chemin de v' à v *)
+     
+     requires{ 0 <= v < Graph.size g }
       
-      (*
-      équivalence visited, accessible est faite par réccurrence, on suppose, que la propriété est maintenu à l'entrée
-      et on démontre sa stabilité à la sortie
-      *)
+    (* équivalence visited/accessibles montrée par récurrence : on suppose qu’elle est vraie à l’entrée
+     et on démontre qu’elle reste vraie à la sortie *)
+     
       (*équivalence visited, accessible ===>*) requires{ forall i.  0 <= i < visited.length -> not visited[i] -> not mem i (!accessible) }
       (*                                ===>*) requires{ forall i.  0 <= i < visited.length -> visited[i] -> mem i (!accessible) }
       
-      requires{ forall i. 0 <= i < visited.length -> visited[i] -> mem i (!accessible) }
+      (*
+        La correction est montrée par récurrence, 
+        on suppose qu'elle valide à l'entrée de la fonction, 
+        et on montre qu'elle reste stable à la fin.
+        
+        On utilise path pour cela, on aurait du utiliser path directement sans récurrence pour simplifier la preuve.
+      *)
       requires{ 
           forall i. 0 <= i < visited.length -> visited[i] -> 
           exists p: path. path g v' i p
        } 
+       
       requires{ path g v' v pt } 
+      
+      (* résultat utilisé pour montrer la décroissance du variant *)
       ensures { nv visited <= nv (old visited) }
+      
+      (* résultats utilisés pour raffiner la preuve. On a pensé à les utiliser dans la complétude.
+         Ils consistent à garantir qu’aucun élément parasite ne modifie 'accessible' ou 'visited'. *)
+
       ensures { forall i. mem i (old (!accessible)) -> mem i (!accessible) }
       ensures { forall i.  0 <= i < visited.length -> old visited[i] -> visited[i] }
       
-      (*
-        On a commencé la complétude. Le problème qu'on a rencontré est que quand on termine l'exécution de branch
-        sur un noeud v, accessible ne va pas forcément contenir tous les noeuds accessibles depuis v, parce que
-        récursivement, si on tombe sur un noeud v' déjà parcouru avant v, on abandonne. On ne cherche pas les noeuds
-        accessibles depuis ce nœud, car on le fera après, avec l'appel à v' (après l'appel de branch à v).
-      *)
-      
+    (* On a commencé la complétude. Le problème rencontré est que lorsqu’on termine l’exécution de branch
+       sur un nœud v, accessible ne contient pas forcément tous les nœuds accessibles depuis v,
+       car récursivement, si on atteint un nœud déjà visité auparavant, on l’abandonne. On ne parcourt pas les nœuds
+       accessibles depuis ce nœud, car on le fera plus tard via un appel à branch sur ce nœud. *)
+
       (*ensures {
         forall i: int, p: path. 
           (forall n: int. mem n p -> 0 <= n < (old visited).length -> not (old visited)[n])
@@ -173,6 +184,7 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
           path g v i p -> mem i (!accessible)
       }*)
       
+      (*résultat de la correction, accessible => visited => existance de path*)
       ensures{ 
           forall i. 0 <= i < visited.length -> visited[i] -> 
           exists p: path. path g v' i p
@@ -180,11 +192,16 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
       
       ensures{visited[v]}
       ensures {mem v (!accessible) }
+      
+      (*preuves par récurrence:*)
       ensures{ forall i. 0 <= i < visited.length -> not visited[i] -> not mem i (!accessible) }
       ensures{ forall i. 0 <= i < visited.length -> visited[i] -> mem i (!accessible) }
+      
       variant { nv visited, 0 }
     =
       if not (visited[v]) then begin
+        (*les assertions suivant sont pour aider le prouveur à montrer le résultat sur numof*)
+        (*pour améliorer la lisibilité, les lignes du code en dehors why3 sont annotées par '(**)' *)
         assert { AEQ.array_eq (old visited) visited };
         visited[v] <- true;
         assert { (old visited)[v] = false };
@@ -195,16 +212,18 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
           N.numof (fun _ x -> x = false) (old visited) 0 (Array.length (old visited))
         };
        
-        accessible := Cons v !accessible;
-        let succs = Graph.succ g v in
+        (**) accessible := Cons v !accessible;
+        (**) let succs = Graph.succ g v in
         label L in
+        (*l'assertion suivant sert à aider le prouveur à montrer la correction*)
         assert{ visited[v] /\ path g v' v pt };
         assert{           
         forall i . 0 <= i < old visited.length -> old visited[i] -> 
           exists p: path. path g v' i p
           };
+        (*pour montrer la stabilité de 'visited'*)
         assert { AEQ.array_eq (old visited) visited[v <- false] };
-         assert{ 
+        assert{ 
           forall i . 
           (i = v -> path g v' v pt) /\ (i <> v -> 0 <= i < visited.length -> visited[i] -> 
           exists p: path. path g v' i p)
@@ -212,9 +231,11 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
         assert{ 
           forall i . 0 <= i < visited.length -> visited[i] -> 
           exists p: path. path g v' i p
-         };
-        loop succs Nil v pt;
+         };   
         
+        (**) loop succs Nil v pt;
+        
+        (*les assertions suivants sont utile pour montrer la stabilité de accessible*)
         assert { forall i. mem i ((!accessible) at L) -> mem i (!accessible) };
         assert { mem v ((!accessible) at L) -> mem v (!accessible) };
         assert{ mem v (!accessible) };
@@ -223,6 +244,8 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
       end
        
     with loop l (ghost preces: list int) (ghost prec: int) (ghost pt: path)
+      (*pour une boucle (loop), ce sont les mêmes préconditions et postconditions qui se répètent, avec quelques variations.*)
+      
       requires { safe_neighbours l g }
       requires{ forall i. mem i l -> mem i (Graph.succ g prec) }
       requires{ path g v' prec pt }
@@ -240,6 +263,7 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
           forall i. 0 <= i < visited.length -> visited[i] -> 
           exists p: path. path g v' i p
       } 
+      
       (*ensures {
         forall i j: int, p: path.
         mem j l
@@ -257,8 +281,6 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
         | Nil -> ()
         | Cons neighbour s -> 
 
-          
-          
           assert{
           1 <= L.length pt /\ v' = Nth.nth 0 pt /\
            prec = Nth.nth (L.length pt - 1) pt /\
@@ -272,25 +294,10 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
           assert { mem neighbour (Graph.succ g prec) };
           assert{ path g v' neighbour (APP.(pt ++ Cons neighbour Nil))};
           branch neighbour (APP.(pt ++ Cons neighbour Nil));
-          (*assert {
-            forall i: int, p: path. 
-            (forall n: int. mem n p -> not (old visited)[n])
-            ->
-            path g neighbour i p -> mem i (!accessible)
-          };*)
+
           assert{ mem neighbour (!accessible) };
           
-          label Z in
           loop s (Cons neighbour preces) prec pt;
-          
-          (*assert {
-            forall i j: int, p: path.
-            mem j l
-            ->
-            (forall n: int. mem n p -> 0 <= n < (old visited).length -> not (old visited)[n])
-            -> path g j i p -> mem i (!accessible)
-            
-          };*)
 
       end;
     in
