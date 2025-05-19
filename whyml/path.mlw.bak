@@ -14,24 +14,48 @@ module Path
 
   type path = list int
 
+  (*
+  predicate of path, 
+      path g u v p: signifies p is a path from u to v in the graph g (p starts with u, and ends with v)
+   *)
   predicate path (g: Graph.t) (x y: int) (p: path)
   = 1 <= L.length p /\ x = Nth.nth 0 p /\ y = Nth.nth (L.length p - 1) p /\
     (forall i. 0 <= i < L.length p -> 0 <= Nth.nth i p < Graph.size g) /\
     (forall i. 0 <= i < L.length p - 1 -> mem (Nth.nth (i+1) p) (Graph.succ g (Nth.nth i p)))
 
+  (*lemma used in the proof below, 
+    if p is a path between j and i, and j is a neighbour of v, then v::p is a path between v and i
+  *)
   lemma path_extension: forall g: Graph.t, v j i: int, p: path.
     0 <= v < Graph.size g -> 0 <= j < Graph.size g -> 
     mem j (Graph.succ g v) -> path g j i p -> 
     path g v i (Cons v p)
     
-  
+  (*
+    fonction qui renvoie le nombre de noeuds visités dans le graphe
+  *)
   function nv (visited: array bool): int = N.numof (fun _ a -> a = false) visited 0 (Array.length visited)
   
+  (*
+    les lemmes en bas, montrent des propriétés en combinant nth et ++
+  *)
+  lemma nth_append:
+  forall l1 l2: list 'a, i: int.
+    0 <= i < L.length l1 -> 
+    Nth.nth i (APP.(l1 ++ l2)) = Nth.nth i l1
+
+  lemma nth_append_right:
+    forall l1 l2: list 'a, i: int.
+      0 <= i < L.length l2 -> 
+      Nth.nth (i + L.length l1) (APP.(l1 ++ l2)) = Nth.nth i l2
+
   lemma numof_concat:
     forall a: array bool, l m r f.
       0 <= l <= m <= r <= Array.length a ->
       N.numof f a l r = N.numof f a l m + N.numof f a m r
  
+ 
+(*ce lemme était un peu difficile pour why3, on l'a aidé avec des assertions pour aboutir à la postcondition.*)
 let lemma numof_update (a: array bool) (i: int) : (array bool)
     requires { 0 <= i < Array.length a }
     requires { a[i] = false }
@@ -66,6 +90,7 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
     +
     N.numof (fun _ x -> x = false) result (i+1) (Array.length result)
     }
+    (*La postcondition dont on a besoin dans la suite de la preuve.*)
     ensures {  
       N.numof (fun _ x -> x = false) a 0 (Array.length a) >
       N.numof (fun _ x -> x = false) result 0 (Array.length result)
@@ -73,13 +98,30 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
   =
     a[i<- true]
 
+
+  (*L elemme précédent est utilisé pour montrer le lemme suivant:
+    Le nombre de valeurs 'faux' dans un tableau ou on substitue une valeur 'faux' par 'vrai'
+    est strictement supérieur au nombre de valeurs 'faux' dans le meme tableau sans appliquant 
+    la substition.
+  *)
   lemma numof_lemma:
     forall a: array bool, i: int. 
     0 <= i < Array.length a -> (a[i] = false) ->
     N.numof (fun _ x -> x = false) (a[i<-true]) 0 a[i<-true].length <
     N.numof (fun _ x -> x = false) a 0 a.length
 
+
+  (*L'algorithme utilisé pour la recherche des chemins accessible est le DFS, 
+      on utilise deux sous-fonctions: 
+          branch: vertex -> (): pour visiter les noeuds.
+          loop: list vertex -> (): pour visiter les branches
+      les entrées: 
+        g: le graph.
+        v': le noeud pour lequel on calculera les chemins accessibles.
+        result: list vertex
+  *)
   let dfs (g: Graph.t) (v': int): (result: list int)
+    (*On demande que le graph et le noeud d'entrée soient valids.*)
     requires { 0 <= v' < Array.length g }
     requires { Graph.safe_graph g }
   =
@@ -87,9 +129,26 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
     let accessible = ref Nil in
 
     let rec branch v (ghost pt: path)
+    (*
+    pt est urilisé pour montrer la correction, au lieu de quantifier existanciellement on le construit directement
+    ce qui facilite le travail sur le prouveur.
+    *)
+    
+    (*
+      pour la correction, on a pris un chemin un peu long, 
+      on a montré que si un noed est visité, alors, il existe un chemin qui mène de v' à v
+      puis on a montré que v \in accessible <==> visited[v], alors que on aurait du 
+      montrer directement que v \inaccessible => il existe un chemin qui mène de v' à v
+    *)
       requires{ 0 <= v < Graph.size g }
-      requires{ forall i.  0 <= i < visited.length -> not visited[i] -> not mem i (!accessible) }
-      requires{ forall i.  0 <= i < visited.length -> visited[i] -> mem i (!accessible) }
+      
+      (*
+      équivalence visited, accessible est faite par réccurrence, on suppose, que la propriété est maintenu à l'entrée
+      et on démontre sa stabilité à la sortie
+      *)
+      (*équivalence visited, accessible ===>*) requires{ forall i.  0 <= i < visited.length -> not visited[i] -> not mem i (!accessible) }
+      (*                                ===>*)requires{ forall i.  0 <= i < visited.length -> visited[i] -> mem i (!accessible) }
+      
       requires{ forall i. 0 <= i < visited.length -> visited[i] -> mem i (!accessible) }
       requires{ 
           forall i. 0 <= i < visited.length -> visited[i] -> 
@@ -99,6 +158,13 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
       ensures { nv visited <= nv (old visited) }
       ensures { forall i. mem i (old (!accessible)) -> mem i (!accessible) }
       ensures { forall i.  0 <= i < visited.length -> old visited[i] -> visited[i] }
+      
+      (*
+        On a commencé la complétude. Le problème qu'on a rencontré est que quand on termine l'exécution de branch
+        sur un noeud v, accessible ne va pas forcément contenir tous les noeuds accessibles depuis v, parce que
+        récursivement, si on tombe sur un noeud v' déjà parcouru avant v, on abandonne. On ne cherche pas les noeuds
+        accessibles depuis ce nœud, car on le fera après, avec l'appel à v' (après l'appel de branch à v).
+      *)
       
       (*ensures {
         forall i: int, p: path. 
@@ -129,7 +195,6 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
           N.numof (fun _ x -> x = false) (old visited) 0 (Array.length (old visited))
         };
        
-
         accessible := Cons v !accessible;
         let succs = Graph.succ g v in
         label L in
@@ -205,21 +270,6 @@ let lemma numof_update (a: array bool) (i: int) : (array bool)
           };  
           
           assert { mem neighbour (Graph.succ g prec) };
-          assert{ L.length APP.(pt ++ Cons neighbour Nil)  = 1 + L.length pt};
-          assert{ L.length pt > 0 };
-          assert{ Nth.nth (L.length pt - 1 ) pt = Nth.nth (L.length pt - 2 ) (APP.(pt ++ Cons neighbour Nil)) };
-          assert{ Nth.nth (L.length pt - 2 ) (APP.(pt ++ Cons neighbour Nil)) = prec }    ;
-          assert{ Nth.nth (L.length pt - 1 ) (APP.(pt ++ Cons neighbour Nil)) = neighbour }  ;      
-          
-          assert{
-          1 <= L.length (APP.(pt ++ Cons neighbour Nil)) /\ v' = Nth.nth 0 (APP.(pt ++ Cons neighbour Nil)) /\
-           neighbour = Nth.nth (L.length (APP.(pt ++ Cons neighbour Nil)) - 1) (pt ++ Cons neighbour Nil) /\
-          (forall i. 0 <= i < L.length (pt ++ Cons neighbour Nil) 
-          -> 0 <= Nth.nth i (pt ++ Cons neighbour Nil) < Graph.size g) 
-          /\
-          (forall i. 0 <= i < L.length (pt ++ Cons neighbour Nil) - 1 
-          -> mem (Nth.nth (i+1) (pt ++ Cons neighbour Nil)) (Graph.succ g (Nth.nth i (pt ++ Cons neighbour Nil))))
-          };
           assert{ path g v' neighbour (APP.(pt ++ Cons neighbour Nil))};
           branch neighbour (APP.(pt ++ Cons neighbour Nil));
           (*assert {

@@ -40,7 +40,7 @@ module Graph
   =
     g[s1] <- Cons s2 g[s1]
   
-  (*Vérifie si une liste de voisin d'un peut etre une instance possible du graphe.*)
+  (*Vérifie si une liste de vertexe peut etre une instance possible *)
   predicate safe_neighbours (l: list int)(g: t) = 
     forall e: int. mem e l -> 0 <= e < Array.length g
 
